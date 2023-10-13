@@ -62,6 +62,7 @@ const App = () => {
   const [gameStarted, setGameStarted] = useState(false);
   const [highScore, setHighScore] = useState(0);
   const [difficulty, setDifficulty] = useState('medium'); // Default difficulty
+  const [fishAppearanceRate, setFishAppearanceRate] = useState(1000); // Default appearance rate in milliseconds
 
   useEffect(() => {
     const createFish = () => {
@@ -108,6 +109,18 @@ const App = () => {
 
   const handleDifficultyChange = (event) => {
     setDifficulty(event.target.value);
+    // Adjust fish appearance rate based on difficulty
+    setFishAppearanceRate(getFishAppearanceRate(event.target.value));
+  };
+
+  const getFishAppearanceRate = (selectedDifficulty) => {
+    // Define appearance rates for each difficulty
+    const rates = {
+      easy: 2000,
+      medium: 1000,
+      hard: 500,
+    };
+    return rates[selectedDifficulty];
   };
 
   useEffect(() => {
@@ -117,12 +130,16 @@ const App = () => {
         const timer = setTimeout(() => {
           setTimeLeft(timeLeft - 1);
         }, 1000);
-        return () => clearTimeout(timer);
+        const fishTimer = setInterval(moveFish, fishAppearanceRate);
+        return () => {
+          clearTimeout(timer);
+          clearInterval(fishTimer);
+        };
       } else if (!gameOver) {
         setGameOver(true);
       }
     }
-  }, [timeLeft, gameOver, gameStarted, fish]);
+  }, [timeLeft, gameOver, gameStarted, fish, fishAppearanceRate]);
 
   return (
     <AppContainer>
