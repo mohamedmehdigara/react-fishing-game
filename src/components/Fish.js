@@ -15,6 +15,6 @@ const Fish = ({ id, position, onClick }) => {
   );
 };
 
-Fish.width = 50; // Add this property to the Fish component for easy reference
+Fish.width = 50;
 
 export default Fish;
