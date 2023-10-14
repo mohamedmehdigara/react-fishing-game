@@ -52,7 +52,7 @@ const App = () => {
   const [highScore, setHighScore] = useState(0);
   const [difficulty, setDifficulty] = useState('medium');
   const [fishAppearanceRate, setFishAppearanceRate] = useState(1000);
-  const [showGetReady, setShowGetReady] = useState(true);
+  const [showGetReady, setShowGetReady] = useState(true); // State variable for the "Get ready" screen
 
   const createFish = (selectedDifficulty) => {
     const fishCount = selectedDifficulty === 'hard' ? 12 : 6;
@@ -93,15 +93,16 @@ const App = () => {
     setTimeLeft(30);
     setGameOver(false);
     setGameStarted(true);
+    setShowGetReady(true); // Reset "Get ready" screen
   };
 
   const handleStartGame = () => {
     setGameStarted(true);
     if (showGetReady) {
-      setShowGetReady(false);
+      setShowGetReady(false); // Hide "Get ready" after starting
       const getReadyTimer = setTimeout(() => {
         handlePlayAgain();
-      }, 3000); // Adjust the time as needed (e.g., 3000 milliseconds = 3 seconds)
+      }, 3000);
       return () => clearTimeout(getReadyTimer);
     }
   };
@@ -140,16 +141,6 @@ const App = () => {
     }
   }, [timeLeft, gameOver, gameStarted, fish, fishAppearanceRate, Pond.width]);
 
-  // Additional logic for ending the game when the timer runs out
-  useEffect(() => {
-    if (gameStarted && timeLeft === 0) {
-      setGameOver(true);
-      if (score > highScore) {
-        setHighScore(score);
-      }
-    }
-  }, [gameStarted, timeLeft]);
-
   return (
     <AppContainer>
       <HighScore>High Score: {highScore}</HighScore>
@@ -158,13 +149,8 @@ const App = () => {
         <option value="medium">Medium</option>
         <option value="hard">Hard</option>
       </DifficultySelector>
-      {showGetReady ? (
-        <GetReadyScreen>
-          <h1>Get ready to catch some fish!</h1>
-        </GetReadyScreen>
-      ) : !gameStarted ? (
-        <GameStatus gameOver={gameOver} score={score} onPlayAgain={handleStartGame} />
-      ) : (
+      <GameStatus gameOver={gameOver} score={score} onPlayAgain={handleStartGame} />
+      {!gameOver && gameStarted && (
         <>
           <Score currentScore={score} highScore={highScore} />
           <FishTank fish={fish} catchFish={catchFish} />
