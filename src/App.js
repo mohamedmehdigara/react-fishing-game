@@ -54,7 +54,6 @@ const App = () => {
   const [fishAppearanceRate, setFishAppearanceRate] = useState(1000);
   const [showGetReady, setShowGetReady] = useState(true);
 
-  // Function to create fish based on difficulty
   const createFish = (selectedDifficulty) => {
     const fishCount = selectedDifficulty === 'hard' ? 12 : 6;
     return Array.from({ length: fishCount }, (_, i) => ({
@@ -140,6 +139,16 @@ const App = () => {
       }
     }
   }, [timeLeft, gameOver, gameStarted, fish, fishAppearanceRate, Pond.width]);
+
+  // Additional logic for ending the game when the timer runs out
+  useEffect(() => {
+    if (gameStarted && timeLeft === 0) {
+      setGameOver(true);
+      if (score > highScore) {
+        setHighScore(score);
+      }
+    }
+  }, [gameStarted, timeLeft]);
 
   return (
     <AppContainer>
