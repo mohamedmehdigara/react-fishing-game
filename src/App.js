@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import Fish from './components/Fish';
 import Timer from './components/Timer';
+import Score from './components/Score';
+import FishTank from './components/FishTank';
+import GameStatus from './components/GameStatus';
 
 const AppContainer = styled.div`
   display: flex;
@@ -20,28 +23,6 @@ const Pond = styled.div`
   position: relative;
 `;
 
-const Score = styled.p`
-  font-size: 24px;
-  margin-top: 20px;
-`;
-
-const GameOverScreen = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-`;
-
-const PlayAgainButton = styled.button`
-  font-size: 18px;
-  background: #f39c12;
-  padding: 10px 20px;
-  border: none;
-  cursor: pointer;
-  margin-top: 20px;
-`;
-
 const HighScore = styled.p`
   font-size: 18px;
   margin-top: 10px;
@@ -54,6 +35,14 @@ const DifficultySelector = styled.select`
   border: 1px solid #ccc;
 `;
 
+const GetReadyScreen = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+`;
+
 const App = () => {
   const [fish, setFish] = useState([]);
   const [score, setScore] = useState(0);
@@ -61,24 +50,27 @@ const App = () => {
   const [gameOver, setGameOver] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
   const [highScore, setHighScore] = useState(0);
-  const [difficulty, setDifficulty] = useState('medium'); // Default difficulty
-  const [fishAppearanceRate, setFishAppearanceRate] = useState(1000); // Default appearance rate in milliseconds
+  const [difficulty, setDifficulty] = useState('medium');
+  const [fishAppearanceRate, setFishAppearanceRate] = useState(1000);
+  const [showGetReady, setShowGetReady] = useState(true);
+
+  // Function to create fish based on difficulty
+  const createFish = (selectedDifficulty) => {
+    const fishCount = selectedDifficulty === 'hard' ? 12 : 6;
+    return Array.from({ length: fishCount }, (_, i) => ({
+      id: i + 1,
+      position: 0,
+    }));
+  };
 
   useEffect(() => {
-    const createFish = () => {
-      const newFish = [];
-      for (let i = 1; i <= 6; i++) {
-        newFish.push({ id: i, position: 0 });
-      }
-      return newFish;
-    };
-
-    setFish(createFish());
+    const selectedDifficulty = difficulty;
+    setFish(createFish(selectedDifficulty));
   }, [difficulty]);
 
   const moveFish = () => {
     const newFish = fish.map((f) => ({
-      id: f.id,
+      ...f,
       position: Math.floor(Math.random() * (Pond.width - Fish.width)),
     }));
     setFish(newFish);
@@ -86,7 +78,7 @@ const App = () => {
 
   const catchFish = (id) => {
     const newFish = fish.map((f) => ({
-      id: f.id,
+      ...f,
       position: f.id === id ? -100 : f.position,
     }));
     setFish(newFish);
@@ -97,30 +89,38 @@ const App = () => {
     if (score > highScore) {
       setHighScore(score);
     }
-    setFish(fish.map((f) => ({ ...f, position: 0 }))); // Reset fish positions
+    setFish(createFish(difficulty));
     setScore(0);
     setTimeLeft(30);
     setGameOver(false);
+    setGameStarted(true);
   };
 
   const handleStartGame = () => {
     setGameStarted(true);
+    if (showGetReady) {
+      setShowGetReady(false);
+      const getReadyTimer = setTimeout(() => {
+        handlePlayAgain();
+      }, 3000); // Adjust the time as needed (e.g., 3000 milliseconds = 3 seconds)
+      return () => clearTimeout(getReadyTimer);
+    }
   };
 
   const handleDifficultyChange = (event) => {
-    setDifficulty(event.target.value);
-    // Adjust fish appearance rate based on difficulty
-    setFishAppearanceRate(getFishAppearanceRate(event.target.value));
+    const selectedDifficulty = event.target.value;
+    setDifficulty(selectedDifficulty);
+    setFishAppearanceRate(getFishAppearanceRate(selectedDifficulty));
+    setFish(createFish(selectedDifficulty));
   };
 
   const getFishAppearanceRate = (selectedDifficulty) => {
-    // Define appearance rates for each difficulty
     const rates = {
       easy: 2000,
       medium: 1000,
       hard: 500,
     };
-    return rates[selectedDifficulty];
+    return rates[selectedDifficulty] || 1000;
   };
 
   useEffect(() => {
@@ -139,7 +139,7 @@ const App = () => {
         setGameOver(true);
       }
     }
-  }, [timeLeft, gameOver, gameStarted, fish, fishAppearanceRate]);
+  }, [timeLeft, gameOver, gameStarted, fish, fishAppearanceRate, Pond.width]);
 
   return (
     <AppContainer>
@@ -149,27 +149,17 @@ const App = () => {
         <option value="medium">Medium</option>
         <option value="hard">Hard</option>
       </DifficultySelector>
-      {!gameStarted ? (
-        <PlayAgainButton onClick={handleStartGame}>Start Game</PlayAgainButton>
+      {showGetReady ? (
+        <GetReadyScreen>
+          <h1>Get ready to catch some fish!</h1>
+        </GetReadyScreen>
+      ) : !gameStarted ? (
+        <GameStatus gameOver={gameOver} score={score} onPlayAgain={handleStartGame} />
       ) : (
         <>
-          {gameOver ? (
-            <GameOverScreen>
-              <h1>Game Over!</h1>
-              <Score>Final Score: {score}</Score>
-              <PlayAgainButton onClick={handlePlayAgain}>Play Again</PlayAgainButton>
-            </GameOverScreen>
-          ) : (
-            <>
-              <Pond>
-                {fish.map((f) => (
-                  <Fish key={f.id} id={f.id} position={f.position} onClick={catchFish} />
-                ))}
-              </Pond>
-              <Score>Score: {score}</Score>
-              <Timer time={timeLeft} />
-            </>
-          )}
+          <Score currentScore={score} highScore={highScore} />
+          <FishTank fish={fish} catchFish={catchFish} />
+          <Timer time={timeLeft} />
         </>
       )}
     </AppContainer>
