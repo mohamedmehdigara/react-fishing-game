@@ -13,9 +13,15 @@ const Pond = styled.div`
 
 const FishTank = ({ fish, catchFish }) => {
   return (
-    <Pond>
-      {fish.map((f) => (
-        <Fish key={f.id} id={f.id} position={f.position} onClick={catchFish} />
+    <Pond data-testid="fish-tank">
+      {fish.map(({ id, position }) => (
+        <Fish
+          key={id}
+          id={id}
+          position={position}
+          onClick={catchFish}
+          data-testid={`fish-${id}`}
+        />
       ))}
     </Pond>
   );

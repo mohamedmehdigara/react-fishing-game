@@ -16,10 +16,11 @@ const Timer = ({ time }) => {
   const minutes = Math.floor(time / 60);
   const seconds = time % 60;
 
-  // Format the time into a string
-  const formattedTime = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+  // Format the time into a string (e.g., 05:09)
+  const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes;
+  const formattedSeconds = seconds < 10 ? `0${seconds}` : seconds;
 
-  return <TimerContainer>Time Left: {formattedTime}</TimerContainer>;
+  return <TimerContainer>Time Left: {formattedMinutes}:{formattedSeconds}</TimerContainer>;
 };
 
 export default Timer;

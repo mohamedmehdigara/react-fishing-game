@@ -3,11 +3,12 @@ import styled from 'styled-components';
 
 // Styled component for the fish image
 const FishImage = styled.div`
-  width: 50px;
-  height: 30px;
-  background: #f39c12;
+  width: ${(props) => props.size}px;
+  height: ${(props) => (props.size * 0.6)}px;
+  background: ${(props) => props.color};
   position: absolute;
   bottom: 0;
+  cursor: pointer;
 `;
 
 /**
@@ -16,18 +17,24 @@ const FishImage = styled.div`
  * @param {number} id - Unique identifier for the fish.
  * @param {number} position - Horizontal position of the fish.
  * @param {function} onClick - Function to handle when the fish is clicked.
+ * @param {number} size - Size of the fish.
+ * @param {string} color - Color of the fish.
  */
-const Fish = ({ id, position, onClick }) => {
+const Fish = ({ id, position, onClick, size, color }) => {
   return (
     <FishImage
       style={{ left: position }}
       onClick={() => onClick(id)}
-      // You can add more styles or props here as needed
+      size={size}
+      color={color}
     />
   );
 };
 
-// Static property to define the width of the fish image
-Fish.width = 50;
+// Static property to define the default width of the fish image
+Fish.defaultProps = {
+  size: 50,
+  color: '#f39c12',
+};
 
 export default Fish;

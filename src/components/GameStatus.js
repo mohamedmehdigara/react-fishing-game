@@ -13,6 +13,10 @@ const StatusContainer = styled.div`
   left: 0;
   right: 0;
   bottom: 0;
+  transition: opacity 0.3s ease;
+  opacity: ${(props) => (props.visible ? 1 : 0)};
+  pointer-events: ${(props) => (props.visible ? 'auto' : 'none')};
+  z-index: ${(props) => (props.visible ? 1 : -1)};
 `;
 
 const GameOverMessage = styled.h1`
@@ -29,14 +33,16 @@ const FinalScore = styled.p`
 const GameStatus = ({ gameOver, score, onPlayAgain }) => {
   useEffect(() => {
     if (!gameOver) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         onPlayAgain();
       }, 3000); // Automatically start the game after 3 seconds
+
+      return () => clearTimeout(timer);
     }
   }, [gameOver, onPlayAgain]);
 
   return (
-    <StatusContainer>
+    <StatusContainer visible={gameOver}>
       {gameOver ? (
         <div>
           <GameOverMessage>Game Over!</GameOverMessage>
