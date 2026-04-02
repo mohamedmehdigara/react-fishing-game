@@ -1,232 +1,308 @@
-import React, { useEffect } from 'react';
-import styled, { keyframes } from 'styled-components';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import styled, { keyframes, css } from 'styled-components';
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
-// --- ZUSTAND STORE ---
-const useGameStore = create((set, get) => ({
-  fish: [],
-  score: 0,
-  timeLeft: 30,
-  gameOver: false,
-  gameStarted: false,
-  highScore: 0,
-  difficulty: 'medium',
-  
-  setDifficulty: (difficulty) => {
-    set({ difficulty });
-  },
-
-  createFishArray: (difficulty) => {
-    // Fewer fish on screen at once makes it less overwhelming
-    const fishCount = difficulty === 'hard' ? 8 : 4; 
-    return Array.from({ length: fishCount }, (_, i) => ({
-      id: i + 1,
-      x: Math.random() * 80 + 10,
-      y: Math.random() * 80 + 10,
-      visible: true,
-      emoji: ['🐟', '🐠', '🐡'][Math.floor(Math.random() * 3)]
-    }));
-  },
-
-  startGame: () => {
-    set({
-      gameStarted: true,
-      gameOver: false,
+// --- ZUSTAND: CORE GAME ENGINE ---
+const useGameStore = create(
+  persist(
+    (set, get) => ({
+      fish: [],
       score: 0,
       timeLeft: 30,
-      fish: get().createFishArray(get().difficulty),
-    });
-  },
+      gameOver: false,
+      gameStarted: false,
+      highScore: 0,
+      difficulty: 'medium',
+      frenzy: false,
+      
+      setDifficulty: (val) => set({ difficulty: val }),
 
-  tick: () => {
-    const { timeLeft, gameOver, gameStarted } = get();
-    if (gameStarted && !gameOver && timeLeft > 0) {
-      set({ timeLeft: timeLeft - 1 });
-      // Fish only move every 2 seconds now (slower than before)
-      if (timeLeft % 2 === 0) get().moveFish(); 
-    } else if (timeLeft <= 0 && gameStarted) {
-      const { score, highScore } = get();
-      set({ gameOver: true, timeLeft: 0, highScore: Math.max(score, highScore) });
-    }
-  },
+      generateFish: (id) => {
+        const rand = Math.random();
+        const isKing = rand > 0.96;
+        const isPuffer = !isKing && rand > 0.85;
+        
+        return {
+          id,
+          x: Math.random() * 80 + 10,
+          y: Math.random() * 80 + 10,
+          prevX: 50,
+          visible: true,
+          isKing,
+          isPuffer,
+          emoji: isKing ? '👑' : isPuffer ? '🐡' : '🐟',
+          points: isKing ? 25 : isPuffer ? 10 : 2,
+          timeBonus: isKing ? 5 : isPuffer ? 2 : 1,
+          speed: isKing ? 0.7 : isPuffer ? 1.1 : 1.6,
+        };
+      },
 
-  moveFish: () => {
-    set((state) => ({
-      fish: state.fish.map((f) => ({
-        ...f,
-        x: Math.random() * 85 + 5,
-        y: Math.random() * 85 + 5,
-      })),
-    }));
-  },
+      startGame: () => {
+        const count = { easy: 6, medium: 10, hard: 16 }[get().difficulty];
+        set({
+          gameStarted: true,
+          gameOver: false,
+          score: 0,
+          timeLeft: 35,
+          frenzy: false,
+          fish: Array.from({ length: count }, (_, i) => get().generateFish(i)),
+        });
+      },
 
-  catchFish: (id) => {
-    const { timeLeft } = get();
-    set((state) => ({
-      score: state.score + 1,
-      timeLeft: timeLeft + 1, // BONUS: Catching a fish gives +1 second!
-      fish: state.fish.map((f) => 
-        f.id === id ? { ...f, visible: false } : f
-      ),
-    }));
-    
-    // Quick respawn
-    setTimeout(() => {
-      set((state) => ({
-        fish: state.fish.map((f) => 
-          f.id === id ? { 
-            ...f, 
-            visible: true, 
-            x: Math.random() * 85 + 5, 
-            y: Math.random() * 85 + 5 
-          } : f
-        ),
-      }));
-    }, 400);
-  },
-}));
+      tick: () => {
+        const { timeLeft, gameStarted, gameOver, score, highScore } = get();
+        if (!gameStarted || gameOver) return;
 
-// --- STYLED COMPONENTS ---
-const AppContainer = styled.div`
+        if (timeLeft <= 0) {
+          set({ gameOver: true, highScore: Math.max(score, highScore) });
+        } else {
+          set({ timeLeft: timeLeft - 1 });
+          // Move fish with variable probability based on difficulty
+          const moveProb = { easy: 0.3, medium: 0.5, hard: 0.7 }[get().difficulty];
+          set(state => ({
+            fish: state.fish.map(f => Math.random() < moveProb 
+              ? { ...f, prevX: f.x, x: Math.random() * 85 + 5, y: Math.random() * 85 + 5 }
+              : f
+            )
+          }));
+        }
+      },
+
+      catchFish: (id) => {
+        const target = get().fish.find(f => f.id === id);
+        if (!target || !target.visible) return null;
+
+        const multiplier = get().frenzy ? 2 : 1;
+        set(state => ({
+          score: state.score + (target.points * multiplier),
+          timeLeft: state.timeLeft + target.timeBonus,
+          fish: state.fish.map(f => f.id === id ? { ...f, visible: false } : f)
+        }));
+
+        // Respawn with a chance to upgrade to King
+        setTimeout(() => {
+          set(state => ({
+            fish: state.fish.map(f => f.id === id ? get().generateFish(id) : f)
+          }));
+        }, 1200);
+
+        return target;
+      },
+
+      triggerFrenzy: (active) => set({ frenzy: active }),
+    }),
+    { name: 'fishing-master-v1' }
+  )
+);
+
+// --- STYLES & ANIMATIONS ---
+const drift = keyframes`
+  from { background-position: 0 0; }
+  to { background-position: 100% 100%; }
+`;
+
+const pulse = keyframes`
+  0% { box-shadow: 0 0 0 0 rgba(235, 47, 6, 0.4); }
+  70% { box-shadow: 0 0 0 20px rgba(235, 47, 6, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(235, 47, 6, 0); }
+`;
+
+const floatUp = keyframes`
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-80px) scale(1.5); opacity: 0; }
+`;
+
+const MainContainer = styled.div`
+  height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh;
-  background: linear-gradient(180deg, #74b9ff 0%, #0984e3 100%);
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  color: white;
+  background: #061e3d;
+  color: #fff;
+  font-family: 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+`;
+
+const HUD = styled.div`
+  display: flex;
+  gap: 50px;
+  margin-bottom: 25px;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-shadow: 0 4px 10px rgba(0,0,0,0.5);
 `;
 
 const Pond = styled.div`
-  width: 95%;
-  max-width: 700px;
-  height: 450px;
-  background: rgba(0, 168, 255, 0.6);
-  border: 10px solid #fff;
-  border-radius: 30px;
   position: relative;
+  width: 90vw;
+  max-width: 1000px;
+  height: 600px;
+  background: #10ac84;
+  background: linear-gradient(135deg, #0a3d62 0%, #3c6382 100%);
+  border: 12px solid ${props => props.isLow ? '#eb2f06' : '#fad390'};
+  border-radius: 40px;
   overflow: hidden;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.3);
-  backdrop-filter: blur(5px);
-`;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+  ${props => props.isLow && css`animation: ${pulse} 1s infinite;`}
+  transition: border-color 0.5s ease;
 
-const FishIcon = styled.div`
-  position: absolute;
-  font-size: 50px; /* Bigger fish = Easier to hit */
-  transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-  left: ${props => props.x}%;
-  top: ${props => props.y}%;
-  display: ${props => props.visible ? 'block' : 'none'};
-  cursor: pointer;
-  filter: drop-shadow(0 0 10px rgba(255,255,255,0.5));
-  
-  &:active {
-    transform: scale(0.8);
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url('https://www.transparenttextures.com/patterns/cubes.png');
+    opacity: 0.1;
+    pointer-events: none;
+    animation: ${drift} 30s linear infinite;
   }
 `;
 
-const StatsBar = styled.div`
-  display: flex;
-  gap: 20px;
-  margin-bottom: 15px;
-  background: rgba(0,0,0,0.2);
-  padding: 10px 30px;
-  border-radius: 50px;
-  font-weight: bold;
-  font-size: 20px;
+const Fish = styled.div.attrs(props => ({
+  style: {
+    left: `${props.x}%`,
+    top: `${props.y}%`,
+    transform: `scaleX(${props.x > props.prevX ? -1 : 1})`,
+  },
+}))`
+  position: absolute;
+  font-size: ${props => props.isKing ? '70px' : props.isPuffer ? '50px' : '40px'};
+  transition: all ${props => props.speed}s cubic-bezier(0.45, 0.05, 0.55, 0.95);
+  cursor: pointer;
+  z-index: 10;
+  filter: drop-shadow(0 8px 10px rgba(0,0,0,0.3));
+  user-select: none;
+  opacity: ${props => props.visible ? 1 : 0};
+  pointer-events: ${props => props.visible ? 'auto' : 'none'};
+
+  &:hover { filter: brightness(1.3) scale(1.2); }
 `;
 
-const Modal = styled.div`
+const FloatingText = styled.div`
+  position: absolute;
+  left: ${props => props.x}%;
+  top: ${props => props.y}%;
+  color: ${props => props.gold ? '#f1c40f' : '#2ecc71'};
+  font-weight: 900;
+  font-size: 30px;
+  pointer-events: none;
+  animation: ${floatUp} 0.8s ease-out forwards;
+  z-index: 100;
+`;
+
+const Overlay = styled.div`
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0,0,0,0.85);
+  backdrop-filter: blur(10px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 200;
   text-align: center;
 `;
 
-const StartButton = styled.button`
-  padding: 15px 40px;
-  font-size: 24px;
-  background: #00b894;
+const Button = styled.button`
+  background: #f39c12;
   color: white;
   border: none;
+  padding: 20px 60px;
+  font-size: 26px;
+  font-weight: 900;
   border-radius: 50px;
   cursor: pointer;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-  transition: transform 0.2s;
-  &:hover { transform: scale(1.05); }
+  box-shadow: 0 8px 0 #d35400;
+  transition: 0.1s;
+  &:active { transform: translateY(4px); box-shadow: 0 4px 0 #d35400; }
 `;
 
-// --- MAIN COMPONENTS ---
+// --- MAIN APP ---
 export default function App() {
-  const { 
-    gameStarted, gameOver, score, timeLeft, highScore, 
-    difficulty, setDifficulty, startGame, tick, fish, catchFish 
-  } = useGameStore();
+  const store = useGameStore();
+  const [popups, setPopups] = useState([]);
 
+  // High-frequency game loop
   useEffect(() => {
-    const interval = setInterval(() => tick(), 1000);
-    return () => clearInterval(interval);
-  }, [tick]);
+    const loop = setInterval(() => store.tick(), 1000);
+    return () => clearInterval(loop);
+  }, [store]);
+
+  const handleCatch = useCallback((id) => {
+    const f = store.catchFish(id);
+    if (f) {
+      const popupId = Date.now();
+      setPopups(prev => [...prev, { 
+        id: popupId, 
+        x: f.x, 
+        y: f.y, 
+        text: f.isKing ? `KING! +${f.points}` : `+${f.points}`,
+        gold: f.isKing 
+      }]);
+      setTimeout(() => setPopups(prev => prev.filter(p => p.id !== popupId)), 800);
+    }
+  }, [store]);
 
   return (
-    <AppContainer>
-      <h1>🎣 Easy Fisher</h1>
-      
-      <StatsBar>
-        <span>Score: {score}</span>
-        <span style={{ color: timeLeft < 10 ? '#ff7675' : '#55efc4' }}>
-          Time: {timeLeft}s
-        </span>
-        <span>High: {highScore}</span>
-      </StatsBar>
+    <MainContainer>
+      <HUD>
+        <div>SCORE: <span style={{color: '#f1c40f'}}>{store.score}</span></div>
+        <div style={{color: store.timeLeft < 6 ? '#e74c3c' : '#2ecc71'}}>
+          TIME: {store.timeLeft}s
+        </div>
+        <div>BEST: {store.highScore}</div>
+      </HUD>
 
-      <Pond>
-        {!gameStarted && (
-          <Modal>
-            <h2>Welcome to the Pond!</h2>
-            <p>Catch fish to gain extra time.</p>
-            <div style={{ margin: '20px' }}>
-              <label>Difficulty: </label>
-              <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
-                <option value="easy">Easy (Relaxed)</option>
-                <option value="medium">Medium (Standard)</option>
-                <option value="hard">Hard (Fast)</option>
+      <Pond isLow={store.timeLeft > 0 && store.timeLeft < 6}>
+        {!store.gameStarted && (
+          <Overlay>
+            <h1 style={{fontSize: '4rem', marginBottom: '0'}}>AQUA CRUSH</h1>
+            <p style={{fontSize: '1.2rem', opacity: 0.8}}>Catch 👑 for massive point multipliers!</p>
+            <div style={{margin: '30px'}}>
+              <select 
+                value={store.difficulty} 
+                onChange={(e) => store.setDifficulty(e.target.value)}
+                style={{padding: '12px 30px', borderRadius: '15px', fontSize: '18px'}}
+              >
+                <option value="easy">Easy Stream</option>
+                <option value="medium">Normal Lake</option>
+                <option value="hard">Expert Ocean</option>
               </select>
             </div>
-            <StartButton onClick={startGame}>Start Fishing</StartButton>
-          </Modal>
+            <Button onClick={store.startGame}>CAST LINE</Button>
+          </Overlay>
         )}
 
-        {gameOver && (
-          <Modal>
-            <h2 style={{ fontSize: '40px' }}>Times Up! ⏰</h2>
-            <p style={{ fontSize: '24px' }}>Final Score: {score}</p>
-            <StartButton onClick={startGame}>Try Again</StartButton>
-          </Modal>
+        {store.gameOver && (
+          <Overlay>
+            <h1 style={{color: '#e74c3c', fontSize: '3rem'}}>TIME EXPIRED</h1>
+            <p style={{fontSize: '2rem'}}>Final Score: <b>{store.score}</b></p>
+            <Button onClick={store.startGame}>REPLAY</Button>
+          </Overlay>
         )}
 
-        {fish.map((f) => (
-          <FishIcon 
+        {store.fish.map((f) => (
+          <Fish 
             key={f.id} 
-            x={f.x} 
-            y={f.y} 
-            visible={f.visible} 
-            onClick={() => catchFish(f.id)}
+            {...f} 
+            onClick={() => handleCatch(f.id)}
           >
             {f.emoji}
-          </FishIcon>
+          </Fish>
+        ))}
+
+        {popups.map(p => (
+          <FloatingText key={p.id} x={p.x} y={p.y} gold={p.gold}>
+            {p.text}
+          </FloatingText>
         ))}
       </Pond>
-      
-      <p style={{ marginTop: '20px', opacity: 0.8 }}>
-        Tip: Every fish you catch adds 1 second to the clock!
-      </p>
-    </AppContainer>
+
+      <div style={{marginTop: '30px', opacity: 0.5, fontSize: '0.9rem'}}>
+        TIP: King fish appear rarely but grant 25 points!
+      </div>
+    </MainContainer>
   );
 }
